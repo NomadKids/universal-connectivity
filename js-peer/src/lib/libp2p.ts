@@ -95,7 +95,13 @@ export async function startLibp2p(): Promise<Libp2pType> {
       return
     }
 
-    dialWebRTCMaddrs(libp2p, multiaddrs)
+    // libp2p.dial() already deduplicates existing and in-flight connection attempts
+    // for the same peer and can try multiple candidate multiaddrs until one succeeds.
+    log(`dialling discovered multiaddrs: %o`, multiaddrs)
+
+    void libp2p.dial(multiaddrs).catch((error) => {
+      log.error(`failed to dial discovered multiaddrs for peer %s: %o`, id, error)
+    })
   })
 
   return libp2p
@@ -110,23 +116,6 @@ export async function msgIdFnStrictNoSign(msg: Message): Promise<Uint8Array> {
   const signedMessage = msg as SignedMessage
   const encodedSeqNum = enc.encode(signedMessage.sequenceNumber.toString())
   return await sha256.encode(encodedSeqNum)
-}
-
-// Function which dials one maddr at a time to avoid establishing multiple connections to the same peer
-async function dialWebRTCMaddrs(libp2p: Libp2p, multiaddrs: Multiaddr[]): Promise<void> {
-  // Filter webrtc (browser-to-browser) multiaddrs
-  const webRTCMadrs = multiaddrs.filter((maddr) => maddr.protoNames().includes('webrtc'))
-  log(`dialling WebRTC multiaddrs: %o`, webRTCMadrs)
-
-  for (const addr of webRTCMadrs) {
-    try {
-      log(`attempting to dial webrtc multiaddr: %o`, addr)
-      await libp2p.dial(addr)
-      return // if we succeed dialing the peer, no need to try another address
-    } catch (error) {
-      log.error(`failed to dial webrtc multiaddr: %o`, addr)
-    }
-  }
 }
 
 export const connectToMultiaddr = (libp2p: Libp2p) => async (multiaddr: Multiaddr) => {
